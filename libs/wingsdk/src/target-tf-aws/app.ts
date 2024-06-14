@@ -8,14 +8,17 @@ import { Queue } from "./queue";
 import { Redis } from "./redis";
 import { Schedule } from "./schedule";
 import { Secret } from "./secret";
+import { Service } from "./service";
 import { Table } from "./table";
 import { TestRunner } from "./test-runner";
 import { Topic } from "./topic";
 import { Website } from "./website";
 import { DataAwsCallerIdentity } from "../.gen/providers/aws/data-aws-caller-identity";
+import { DataAwsEcrAuthorizationToken } from "../.gen/providers/aws/data-aws-ecr-authorization-token";
 import { DataAwsRegion } from "../.gen/providers/aws/data-aws-region";
 import { DataAwsSubnet } from "../.gen/providers/aws/data-aws-subnet";
 import { DataAwsVpc } from "../.gen/providers/aws/data-aws-vpc";
+import { EcrRepository } from "../.gen/providers/aws/ecr-repository";
 import { Eip } from "../.gen/providers/aws/eip";
 import { InternetGateway } from "../.gen/providers/aws/internet-gateway";
 import { NatGateway } from "../.gen/providers/aws/nat-gateway";
@@ -23,7 +26,10 @@ import { AwsProvider } from "../.gen/providers/aws/provider";
 import { RouteTable } from "../.gen/providers/aws/route-table";
 import { RouteTableAssociation } from "../.gen/providers/aws/route-table-association";
 import { S3Bucket } from "../.gen/providers/aws/s3-bucket";
+import { EcsCluster } from "../.gen/providers/aws/ecs-cluster";
+import { EcsClusterCapacityProviders } from "../.gen/providers/aws/ecs-cluster-capacity-providers";
 import { Subnet } from "../.gen/providers/aws/subnet";
+import { DockerProvider } from "../.gen/providers/docker/provider";
 import { Vpc } from "../.gen/providers/aws/vpc";
 import {
   API_FQN,
@@ -36,6 +42,7 @@ import {
   QUEUE_FQN,
   SCHEDULE_FQN,
   SECRET_FQN,
+  SERVICE_FQN,
   TOPIC_FQN,
   WEBSITE_FQN,
 } from "../cloud";
@@ -57,6 +64,10 @@ export class App extends CdktfApp {
   private awsAccountIdProvider?: DataAwsCallerIdentity;
   private _vpc?: Vpc | DataAwsVpc;
   private _codeBucket?: S3Bucket;
+  private _ecr?: EcrRepository;
+  private _ecr_auth?: DataAwsEcrAuthorizationToken;
+  private _dockerProvider?: DockerProvider;
+  private _ecsCluster?: EcsCluster;
 
   /** Subnets shared across app */
   public subnets: { [key: string]: (Subnet | DataAwsSubnet)[] };
@@ -122,6 +133,9 @@ export class App extends CdktfApp {
 
       case ENDPOINT_FQN:
         return Endpoint;
+
+      case SERVICE_FQN:
+        return Service;
     }
 
     return undefined;
@@ -343,5 +357,86 @@ export class App extends CdktfApp {
     this.subnets.private.push(privateSubnet);
     this.subnets.private.push(privateSubnet2);
     return this._vpc;
+  }
+
+  /**
+   * The ECR Repository for the App
+   */
+  public get ecr(): EcrRepository {
+    if (this._ecr) {
+      return this._ecr;
+    }
+
+    const ecr = new EcrRepository(this, "Ecr", {
+      name: "my-ecr-repo", // TODO: make this configurable
+    });
+
+    this._ecr = ecr;
+    return this._ecr;
+  }
+
+  /**
+   * The ECR Authorization Token for the App
+   */
+  public get ecrAuth(): DataAwsEcrAuthorizationToken {
+    if (this._ecr_auth) {
+      return this._ecr_auth;
+    }
+
+    if (!this._ecr) {
+      this.ecr;
+    }
+
+    const ecrAuth = new DataAwsEcrAuthorizationToken(this, "EcrAuth", {
+      registryId: this.accountId,
+    });
+
+    this._ecr_auth = ecrAuth;
+    return this._ecr_auth;
+  }
+
+  /**
+   * The Docker Provider for the App
+   */
+  public get dockerProvider(): DockerProvider {
+    if (this._dockerProvider) {
+      return this._dockerProvider;
+    }
+
+    if (!this._ecr_auth) {
+      this.ecrAuth;
+    }
+
+    this._dockerProvider = new DockerProvider(this, "DockerProvider", {
+      registryAuth: [
+        {
+          address: this.ecrAuth.proxyEndpoint,
+          username: this.ecrAuth.userName,
+          password: this.ecrAuth.password,
+        }
+      ]
+    });
+
+    return this._dockerProvider;
+  }
+
+  /**
+   * The ECS Cluster for the App
+   */
+  public get ecsCluster(): EcsCluster {
+    if (this._ecsCluster) {
+      return this._ecsCluster;
+    }
+
+    this._ecsCluster = new EcsCluster(this, "EcsCluster", {
+      name: "my-ecs-cluster", // TODO: make this configurable
+    });
+
+    new EcsClusterCapacityProviders(this, "EcsClusterCapacityProviders", {
+      clusterName: this._ecsCluster.name,
+      capacityProviders: ["FARGATE"],
+    });
+
+    return this._ecsCluster;
   }
 }
