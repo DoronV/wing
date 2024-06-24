@@ -1,3 +1,4 @@
+import { Construct } from "constructs";
 import { Api } from "./api";
 import { BUCKET_PREFIX_OPTS, Bucket } from "./bucket";
 import { Counter } from "./counter";
@@ -52,7 +53,6 @@ import { NameOptions, ResourceNames } from "../shared/resource-names";
 import { Domain } from "../shared-aws/domain";
 import { CdktfApp } from "../shared-tf/app";
 import { TEST_RUNNER_FQN } from "../std";
-import { Construct } from "constructs";
 
 /**
  * An app that knows how to synthesize constructs into a Terraform configuration
