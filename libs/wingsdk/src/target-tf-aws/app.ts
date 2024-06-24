@@ -52,6 +52,7 @@ import { NameOptions, ResourceNames } from "../shared/resource-names";
 import { Domain } from "../shared-aws/domain";
 import { CdktfApp } from "../shared-tf/app";
 import { TEST_RUNNER_FQN } from "../std";
+import { Construct } from "constructs";
 
 /**
  * An app that knows how to synthesize constructs into a Terraform configuration
@@ -68,6 +69,7 @@ export class App extends CdktfApp {
   private _ecr_auth?: DataAwsEcrAuthorizationToken;
   private _dockerProvider?: DockerProvider;
   private _ecsCluster?: EcsCluster;
+  private _rootConstruct: Construct;
 
   /** Subnets shared across app */
   public subnets: { [key: string]: (Subnet | DataAwsSubnet)[] };
@@ -81,6 +83,7 @@ export class App extends CdktfApp {
       public: [],
     };
 
+    this._rootConstruct = props.rootConstruct;
     TestRunner._createTree(this, props.rootConstruct);
   }
 
@@ -368,7 +371,7 @@ export class App extends CdktfApp {
     }
 
     const ecr = new EcrRepository(this, "Ecr", {
-      name: "my-ecr-repo", // TODO: make this configurable
+      name: `${this._rootConstruct.node.id}-images`,
     });
 
     this._ecr = ecr;
@@ -403,6 +406,7 @@ export class App extends CdktfApp {
       return this._dockerProvider;
     }
 
+    // Make sure we also have an ECR repository in this app
     if (!this._ecr_auth) {
       this.ecrAuth;
     }
@@ -429,7 +433,7 @@ export class App extends CdktfApp {
     }
 
     this._ecsCluster = new EcsCluster(this, "EcsCluster", {
-      name: "my-ecs-cluster", // TODO: make this configurable
+      name: `${this._rootConstruct.node.id}-cluster`,
     });
 
     new EcsClusterCapacityProviders(this, "EcsClusterCapacityProviders", {
